@@ -1,0 +1,62 @@
+{
+    "name": "thomasvantuycom/flysystem-cloudinary",
+    "description": "Cloudinary filesystem adapter for Flysystem.",
+    "type": "library",
+    "keywords": [
+        "cloudinary",
+        "flysystem",
+        "filesystem",
+        "storage",
+        "file",
+        "files"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Thomas Vantuycom",
+            "email": "thomasvantuycom@proton.me",
+            "homepage": "https://thomasvantuycom.com",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "email": "thomasvantuycom@proton.me",
+        "issues": "https://github.com/thomasvantuycom/flysystem-cloudinary/issues",
+        "source": "https://github.com/thomasvantuycom/flysystem-cloudinary",
+        "docs": "https://github.com/thomasvantuycom/flysystem-cloudinary",
+        "rss": "https://github.com/thomasvantuycom/flysystem-cloudinary/releases.atom"
+    },
+    "funding": [
+        {
+            "type": "github",
+            "url": "https://github.com/sponsors/thomasvantuycom"
+        }
+    ],
+    "require": {
+        "php": "^8.0.2",
+        "league/flysystem": "^3.23",
+        "cloudinary/cloudinary_php": "^2.12"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "phpstan/phpstan": "^1.10",
+        "league/flysystem-adapter-test-utilities": "^3.21"
+    },
+    "autoload": {
+        "psr-4": {
+            "ThomasVantuycom\\FlysystemCloudinary\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ThomasVantuycom\\FlysystemCloudinary\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit tests",
+        "phpstan": "phpstan analyse --level=4 src"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
