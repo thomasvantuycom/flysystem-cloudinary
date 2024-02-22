@@ -314,7 +314,7 @@ class CloudinaryAdapter implements FilesystemAdapter
                         $resource["resource_type"] === "raw"
                             ? $resource["public_id"]
                             : $resource["public_id"] . "." . $resource["format"];
-                    if ($this->dynamicFolders && $resource["asset_folder"] !== "") {
+                    if ($this->dynamicFolders && isset($resource["asset_folder"]) && $resource["asset_folder"] !== "") {
                         $path = $resource["asset_folder"] . "/" . $path;
                     }
                     $path = $this->prefixer->stripPrefix($path);
