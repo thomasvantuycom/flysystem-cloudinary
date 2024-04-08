@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 1.0.1 - 2024-04-08
+
+### Fixed
+
+- Allow altering an asset's folder in dynamic folder mode.
+
 ## 1.0.0 - 2024-01-26
 
 - Initial release.
