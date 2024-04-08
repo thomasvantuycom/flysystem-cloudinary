@@ -390,7 +390,11 @@ class CloudinaryAdapter implements FilesystemAdapter
                     $options["asset_folder"] = $folder;
                 }
             }
-            $this->client->uploadApi()->rename($publicId, $newPublicId, $options);
+            if ($newPublicId === $publicId) {
+                $this->client->adminApi()->update($publicId, $options);        
+            } else {
+                $this->client->uploadApi()->rename($publicId, $newPublicId, $options);
+            }
         } catch (Throwable $e) {
             throw UnableToMoveFile::fromLocationTo($source, $destination, $e);
         }
