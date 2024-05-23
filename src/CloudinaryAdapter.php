@@ -51,9 +51,13 @@ class CloudinaryAdapter implements FilesystemAdapter
         try {
             $resourceType = $this->pathToResourceType($path);
             $publicId = $this->pathToPublicId($path, $resourceType);
-            $this->client->adminApi()->asset($publicId, [
+            $resource = $this->client->adminApi()->asset($publicId, [
                 "resource_type" => $resourceType,
             ]);
+
+            if ($resource["bytes"] === 0) {
+                return false;
+            }
         } catch (NotFound $e) {
             return false;
         } catch (Throwable $e) {
@@ -301,6 +305,7 @@ class CloudinaryAdapter implements FilesystemAdapter
             } else {
                 $expression = $deep ? "folder=\"$path/*\"" : "folder=\"$path\"";
             }
+            $expression .= ($expression === "") ? "bytes > 0" : " AND bytes > 0";
             $response = null;
             do {
                 $response = $this->client
