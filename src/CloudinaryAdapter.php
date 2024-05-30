@@ -460,6 +460,7 @@ class CloudinaryAdapter implements FilesystemAdapter
 
         switch (true) {
             case str_starts_with($mimeType, "image/"):
+            case "application/pdf":
                 return AssetType::IMAGE;
             case str_starts_with($mimeType, "video/"):
             case str_starts_with($mimeType, "audio/"):
