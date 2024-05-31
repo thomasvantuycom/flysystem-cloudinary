@@ -7,11 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 1.0.4 - 2024-06-01
+
+### Fixed
+
+- Correct resource types.
+
 ## 1.0.3 - 2024-05-31
 
 ### Fixed
 
-- Classify PDFs as images
+- Classify PDFs as images.
 
 ## 1.0.2 - 2024-05-23
 
