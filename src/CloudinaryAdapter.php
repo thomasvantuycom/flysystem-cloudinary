@@ -206,6 +206,8 @@ class CloudinaryAdapter implements FilesystemAdapter
                 }
             }
             $this->client->adminApi()->deleteFolder($path);
+        } catch (NotFound $e) {
+            // Silently fail when the remote folder did not exist?
         } catch (Throwable $e) {
             throw UnableToDeleteDirectory::atLocation($path, $e->getMessage(), $e);
         }
@@ -396,7 +398,7 @@ class CloudinaryAdapter implements FilesystemAdapter
                 }
             }
             if ($newPublicId === $publicId) {
-                $this->client->adminApi()->update($publicId, $options);        
+                $this->client->adminApi()->update($publicId, $options);
             } else {
                 $this->client->uploadApi()->rename($publicId, $newPublicId, $options);
             }
