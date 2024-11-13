@@ -300,13 +300,17 @@ class CloudinaryAdapter implements FilesystemAdapter
             $path = $this->prefixer->prefixPath($path);
             $path = trim($path, "/");
             $originalPath = $path;
+            $response = null;
+
+            // Build the search expression
             if ($path === "" || $path === ".") {
                 $expression = $deep ? "" : "folder=\"\"";
             } else {
                 $expression = $deep ? "folder=\"$path/*\"" : "folder=\"$path\"";
             }
             $expression .= ($expression === "") ? "bytes > 0" : " AND bytes > 0";
-            $response = null;
+
+            // Loop through all assets
             do {
                 $response = $this->client
                     ->searchApi()
@@ -314,14 +318,23 @@ class CloudinaryAdapter implements FilesystemAdapter
                     ->maxResults(500)
                     ->nextCursor($response["next_cursor"] ?? null)
                     ->execute();
+
                 foreach ($response["resources"] as $resource) {
-                    $path =
-                        $resource["resource_type"] === "raw"
+
+                    // Add the extension to the path, unless the type is set to "raw"
+                    $path = $resource["resource_type"] === "raw"
                             ? $resource["public_id"]
                             : $resource["public_id"] . "." . $resource["format"];
-                    if ($this->dynamicFolders && $resource["asset_folder"] !== "") {
+
+                    // Prepend the asset folder to the path, unless the path already contains it
+                    if (
+                        $this->dynamicFolders
+                        && $resource["asset_folder"] !== ""
+                        && !str_starts_with($path, $resource["asset_folder"])
+                    ) {
                         $path = $resource["asset_folder"] . "/" . $path;
                     }
+
                     $path = $this->prefixer->stripPrefix($path);
                     $filesize = $resource["bytes"];
                     $visibility = $resource["access_mode"] === "public" ? "public" : "private";
@@ -396,7 +409,7 @@ class CloudinaryAdapter implements FilesystemAdapter
                 }
             }
             if ($newPublicId === $publicId) {
-                $this->client->adminApi()->update($publicId, $options);        
+                $this->client->adminApi()->update($publicId, $options);
             } else {
                 $this->client->uploadApi()->rename($publicId, $newPublicId, $options);
             }
