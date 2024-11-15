@@ -337,7 +337,11 @@ class CloudinaryAdapter implements FilesystemAdapter
                         $filesize,
                         $visibility,
                         $lastModified,
-                        $mimeType
+                        $mimeType,
+                        extraMetadata: [
+                            'public_id' => $resource["public_id"],
+                            'asset_folder' => $resource["asset_folder"],
+                        ]
                     );
                 }
             } while (isset($response["next_cursor"]));
