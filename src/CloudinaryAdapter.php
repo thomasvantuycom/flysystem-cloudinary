@@ -24,6 +24,7 @@ use League\Flysystem\Visibility;
 use League\MimeTypeDetection\FinfoMimeTypeDetector;
 use GuzzleHttp\Psr7\Utils;
 use League\Flysystem\PathPrefixer;
+use League\Flysystem\UnableToCopyFile;
 use League\MimeTypeDetection\MimeTypeDetector;
 use Throwable;
 
@@ -426,7 +427,7 @@ class CloudinaryAdapter implements FilesystemAdapter
             }
             $this->client->uploadApi()->upload($url, $options);
         } catch (Throwable $e) {
-            throw UnableToMoveFile::fromLocationTo($source, $destination, $e);
+            throw UnableToCopyFile::fromLocationTo($source, $destination, $e);
         }
     }
 
