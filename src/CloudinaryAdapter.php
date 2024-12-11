@@ -27,6 +27,7 @@ use League\Flysystem\PathPrefixer;
 use League\Flysystem\UnableToCopyFile;
 use League\MimeTypeDetection\MimeTypeDetector;
 use Throwable;
+use Generator;
 
 class CloudinaryAdapter implements FilesystemAdapter
 {
@@ -71,13 +72,14 @@ class CloudinaryAdapter implements FilesystemAdapter
     {
         try {
             $path = $this->prefixer->prefixPath($path);
-            $expression = "path=$path";
-            $response = $this->client
-                ->searchFoldersApi()
-                ->expression($expression)
-                ->maxResults(1)
-                ->execute();
-            return $response["total_count"] === 1;
+
+            $this->client->adminApi()->subFolders($path, [
+                'max_results' => 1,
+            ]);
+
+            return true;
+        } catch (NotFound $e) {
+            return false;
         } catch (Throwable $e) {
             throw UnableToCheckDirectoryExistence::forLocation($path, $e);
         }
@@ -161,49 +163,9 @@ class CloudinaryAdapter implements FilesystemAdapter
     public function deleteDirectory(string $path): void
     {
         try {
-            $path = $this->prefixer->prefixPath($path);
-            if ($this->dynamicFolders) {
-                $resources = [];
-                $response = null;
-                do {
-                    $response = $this->client
-                        ->searchApi()
-                        ->expression("asset_folder=\"$path/*\"")
-                        ->maxResults(500)
-                        ->nextCursor($response["next_cursor"] ?? null)
-                        ->execute();
-                    array_push($resources, ...$response["resources"]);
-                } while (isset($response["next_cursor"]));
-                foreach ([AssetType::IMAGE, AssetType::VIDEO, AssetType::RAW] as $resourceType) {
-                    $resourcesOfType = array_filter(
-                        $resources,
-                        fn($resource) => $resource["resource_type"] === $resourceType
-                    );
-                    for ($i = 0; $i < count($resourcesOfType); $i += 100) {
-                        $this->client
-                            ->adminApi()
-                            ->deleteAssets(
-                                array_map(
-                                    fn($resource) => $resource["public_id"],
-                                    array_slice($resources, $i, $i + 100)
-                                ),
-                                [
-                                    "invalidate" => true,
-                                    "resource_type" => $resourceType,
-                                ]
-                            );
-                    }
-                }
-            } else {
-                foreach ([AssetType::IMAGE, AssetType::VIDEO, AssetType::RAW] as $resourceType) {
-                    $response = null;
-                    do {
-                        $response = $this->client->adminApi()->deleteAssetsByPrefix("$path/", [
-                            "invalidate" => true,
-                            "next_cursor" => $response["next_cursor"] ?? null,
-                            "resource_type" => $resourceType,
-                        ]);
-                    } while (isset($response["next_cursor"]));
+            foreach ($this->listContents($path, true) as $item) {
+                if ($item->isFile()) {
+                    $this->delete($item->path());
                 }
             }
             $this->client->adminApi()->deleteFolder($path);
@@ -295,83 +257,139 @@ class CloudinaryAdapter implements FilesystemAdapter
         }
     }
 
+    private function mapResourceAttributes(array $resource): FileAttributes
+    {
+        $path = $resource["resource_type"] === "raw" ? $resource["public_id"] : $resource["public_id"] . "." . $resource["format"];
+        if ($this->dynamicFolders) {
+            if ($resource["asset_folder"] !== "") {
+                $path = $resource["asset_folder"] . "/" . $path;
+            }
+        }
+        $path = $this->prefixer->stripPrefix($path);
+        $fileSize = $resource["bytes"];
+        $visibility = "public";
+        $lastModified = strtotime($resource["last_updated"]["updated_at"] ?? $resource["created_at"]);
+        $mimeType = $this->mimeTypeDetector->detectMimeTypeFromPath($path);
+
+        return new FileAttributes(
+            $path,
+            $fileSize,
+            $visibility,
+            $lastModified,
+            $mimeType
+        );
+    }
+
+    private function mapFolderAttributes(array $folder): DirectoryAttributes
+    {
+        $path = $folder["path"];
+        $path = $this->prefixer->stripPrefix($path);
+
+        return new DirectoryAttributes(
+            $path
+        );
+    }
+
+    private function listFilesByDynamicFolder(string $path): Generator
+    {
+        $path = $this->prefixer->prefixPath($path);
+
+        do {
+            $response = $this->client->adminApi()->assetsByAssetFolder($path, [
+                "max_results" => 500,
+                "next_cursor" => $response["next_cursor"] ?? null,
+            ]);
+
+            foreach ($response['resources'] as $resource) {
+                yield $this->mapResourceAttributes($resource);
+            }
+
+        } while (isset($response["next_cursor"]));
+    }
+
+    private function listFilesByFixedFolder(string $path, bool $deep): Generator
+    {
+        $path = $this->prefixer->prefixPath($path);
+
+        foreach ([AssetType::IMAGE, AssetType::VIDEO, AssetType::RAW] as $resourceType) {
+            do {
+                $response = $this->client->adminApi()->assets([
+                    "resource_type" => $resourceType,
+                    "type" => "upload",
+                    "prefix" => $path === "" ? "" : $path . "/",
+                    "max_results" => 500,
+                    "next_cursor" => $response["next_cursor"] ?? null,
+                ]);
+
+                foreach ($response["resources"] as $resource) {
+                    if (!$deep && $resource["folder"] !== $path) {
+                        continue;
+                    }
+
+                    if (!empty($resource["placeholder"])) {
+                        continue;
+                    }
+
+                    yield $this->mapResourceAttributes($resource);
+                }
+            } while (isset($response["next_cursor"]));
+        }
+    }
+
+    private function listFolders(string $path, bool $deep): Generator
+    {
+        $path = $this->prefixer->prefixPath($path);
+
+        do {
+            if ($path === "") {
+                $response = $this->client->adminApi()->rootFolders([
+                    "max_results" => 500,
+                    "next_cursor" => $response["next_cursor"] ?? null,
+                ]);
+            } else {
+                $response = $this->client->adminApi()->subFolders($path, [
+                    "max_results" => 500,
+                    "next_cursor" => $response["next_cursor"] ?? null,
+                ]);
+            }
+
+            foreach ($response['folders'] as $folder) {
+                $directoryAttributes = $this->mapFolderAttributes($folder);
+
+                yield $directoryAttributes;
+
+                if ($deep) {
+                    yield from $this->listFolders($directoryAttributes->path(), $deep);
+                }
+            }
+        } while (isset($response['next_cursor']));
+    }
+
     public function listContents(string $path, bool $deep): iterable
     {
         try {
-            $path = $this->prefixer->prefixPath($path);
-            $path = trim($path, "/");
-            $originalPath = $path;
-            if ($path === "" || $path === ".") {
-                $expression = $deep ? "" : "folder=\"\"";
-            } else {
-                $expression = $deep ? "folder=\"$path/*\"" : "folder=\"$path\"";
-            }
-            $expression .= ($expression === "") ? "bytes > 0" : " AND bytes > 0";
-            $response = null;
-            do {
-                $response = $this->client
-                    ->searchApi()
-                    ->expression($expression)
-                    ->maxResults(500)
-                    ->nextCursor($response["next_cursor"] ?? null)
-                    ->execute();
-                foreach ($response["resources"] as $resource) {
-                    $path =
-                        $resource["resource_type"] === "raw"
-                            ? $resource["public_id"]
-                            : $resource["public_id"] . "." . $resource["format"];
-                    if ($this->dynamicFolders && $resource["asset_folder"] !== "") {
-                        $path = $resource["asset_folder"] . "/" . $path;
-                    }
-                    $path = $this->prefixer->stripPrefix($path);
-                    $filesize = $resource["bytes"];
-                    $visibility = $resource["access_mode"] === "public" ? "public" : "private";
-                    $lastModified = strtotime(
-                        $resource["last_updated"]["updated_at"] ?? $resource["created_at"]
-                    );
-                    $detector = new FinfoMimeTypeDetector();
-                    $mimeType = $detector->detectMimeTypeFromPath($path);
-                    yield new FileAttributes(
-                        $path,
-                        $filesize,
-                        $visibility,
-                        $lastModified,
-                        $mimeType
-                    );
+            if ($this->dynamicFolders) {
+                foreach ($this->listFilesByDynamicFolder($path) as $fileAttributes) {
+                    yield $fileAttributes;
                 }
-            } while (isset($response["next_cursor"]));
 
-            $path = $originalPath;
-            if ($deep) {
-                if ($path === "" || $path === "/" || $path === ".") {
-                    $expression = "";
-                } else {
-                    $expression = "path=\"$path/*\"";
+                foreach ($this->listFolders($path, $deep) as $directoryAttributes) {
+                    yield $directoryAttributes;
+
+                    if ($deep) {
+                        foreach ($this->listFilesByDynamicFolder($directoryAttributes->path()) as $fileAttributes) {
+                            yield $fileAttributes;
+                        }
+                    }
                 }
-                $response = null;
-                do {
-                    $response = $this->client
-                        ->searchFoldersApi()
-                        ->expression($expression)
-                        ->maxResults(500)
-                        ->nextCursor($response["next_cursor"] ?? null)
-                        ->execute();
-                    foreach ($response["folders"] as $resource) {
-                        $path = $this->prefixer->stripPrefix($resource["path"]);
-                        yield new DirectoryAttributes($path);
-                    }
-                } while (isset($response["next_cursor"]));
             } else {
-                $response = null;
-                do {
-                    $response = $this->client->adminApi()->subFolders($path, [
-                        "next_cursor" => $response["next_cursor"] ?? null,
-                    ]);
-                    foreach ($response["folders"] as $resource) {
-                        $path = $this->prefixer->stripPrefix($resource["path"]);
-                        yield new DirectoryAttributes($path);
-                    }
-                } while (isset($response["next_cursor"]));
+                foreach ($this->listFilesByFixedFolder($path, $deep) as $fileAttributes) {
+                    yield $fileAttributes;
+                }
+
+                foreach ($this->listFolders($path, $deep) as $directoryAttributes) {
+                    yield $directoryAttributes;
+                }
             }
         } catch (Throwable $e) {
             throw UnableToListContents::atLocation($path, $deep, $e);
