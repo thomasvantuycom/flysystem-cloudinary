@@ -2,6 +2,7 @@
 
 namespace ThomasVantuycom\FlysystemCloudinary;
 
+use Cloudinary\Api\ApiResponse;
 use Cloudinary\Cloudinary;
 use Cloudinary\Api\Exception\NotFound;
 use Cloudinary\Asset\AssetType;
@@ -24,7 +25,6 @@ use League\Flysystem\UnableToSetVisibility;
 use League\Flysystem\UrlGeneration\PublicUrlGenerator;
 use League\Flysystem\Visibility;
 use League\MimeTypeDetection\FinfoMimeTypeDetector;
-use GuzzleHttp\Psr7\Utils;
 use League\Flysystem\UnableToCopyFile;
 use League\MimeTypeDetection\MimeTypeDetector;
 use Throwable;
@@ -49,15 +49,9 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     public function fileExists(string $path): bool
     {
         try {
-            $resourceType = $this->pathToResourceType($path);
-            $publicId = $this->pathToPublicId($path, $resourceType);
-            $resource = $this->client->adminApi()->asset($publicId, [
-                "resource_type" => $resourceType,
-            ]);
+            $this->resource($path);
 
-            if ($resource["bytes"] === 0) {
-                return false;
-            }
+            return true;
         } catch (NotFound $e) {
             return false;
         } catch (Throwable $e) {
@@ -84,7 +78,10 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     public function write(string $path, string $contents, Config $config): void
     {
         try {
-            $stream = Utils::streamFor($contents);
+            $stream = fopen('php://temp', 'w+b');
+            fwrite($stream, $contents);
+            rewind($stream);
+
             $this->writeStream($path, $stream, $config);
         } catch (Throwable $e) {
             throw UnableToWriteFile::atLocation($path, $e->getMessage(), $e);
@@ -94,21 +91,21 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     public function writeStream(string $path, $contents, Config $config): void
     {
         try {
-            $resourceType = $this->pathToResourceType($path);
-            $publicId = $this->pathToPublicId($path, $resourceType);
+            $resourceType = $this->resourceType($path);
+            $publicId = $this->publicId($path, $resourceType);
+
             $options = [
-                "filename" => $path,
-                "invalidate" => true,
-                "overwrite" => true,
                 "public_id" => $publicId,
                 "resource_type" => $resourceType,
+                "filename" => $path,
+                "overwrite" => true,
+                "invalidate" => true,
             ];
-            if ($this->dynamicFolders) {
-                $folder = $this->pathToFolder($path);
-                if ($folder !== "" && $folder !== ".") {
-                    $options["asset_folder"] = $folder;
-                }
+
+            if ($this->dynamicFolders && ($folder = $this->folder($path)) !== '') {
+                $options['asset_folder'] = $folder;
             }
+
             $this->client->uploadApi()->upload($contents, $options);
         } catch (Throwable $e) {
             throw UnableToWriteFile::atLocation($path, $e->getMessage(), $e);
@@ -119,8 +116,8 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     {
         try {
             $stream = $this->readStream($path);
-            $contents = Utils::tryGetContents($stream);
-            return $contents;
+
+            return stream_get_contents($stream);
         } catch (Throwable $e) {
             throw UnableToReadFile::fromLocation($path, $e->getMessage(), $e);
         }
@@ -129,11 +126,9 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     public function readStream(string $path)
     {
         try {
-            $resourceType = $this->pathToResourceType($path);
-            $publicId = $this->pathToPublicId($path, $resourceType);
-            $url = $this->pathToUrl($publicId, $resourceType);
-            $contents = Utils::tryFopen($url, "rb");
-            return $contents;
+            $publicUrl = $this->publicUrl($path, new Config());
+
+            return fopen($publicUrl, "rb");
         } catch (Throwable $e) {
             throw UnableToReadFile::fromLocation($path, $e->getMessage(), $e);
         }
@@ -142,15 +137,14 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     public function delete(string $path): void
     {
         try {
-            $resourceType = $this->pathToResourceType($path);
-            $publicId = $this->pathToPublicId($path, $resourceType);
-            $this->client->adminApi()->deleteAssets(
-                [$publicId],
-                [
-                    "invalidate" => true,
-                    "resource_type" => $resourceType,
-                ]
-            );
+            $resourceType = $this->resourceType($path);
+            $publicId = $this->publicId($path, $resourceType);
+
+            $this->client->uploadApi()->destroy($publicId, [
+                "resource_type" => $resourceType,
+                "type" => "upload",
+                "invalidate" => true,
+            ]);
         } catch (Throwable $e) {
             throw UnableToDeleteFile::atLocation($path, $e->getMessage(), $e);
         }
@@ -164,6 +158,7 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
                     $this->delete($item->path());
                 }
             }
+
             $this->client->adminApi()->deleteFolder($path);
         } catch (Throwable $e) {
             throw UnableToDeleteDirectory::atLocation($path, $e->getMessage(), $e);
@@ -181,21 +176,15 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
 
     public function setVisibility(string $path, string $visibility): void
     {
-        throw UnableToSetVisibility::atLocation(
-            $path,
-            "Cloudinary does not support this operation."
-        );
+        throw UnableToSetVisibility::atLocation($path, "Cloudinary does not support this operation.");
     }
 
     public function visibility(string $path): FileAttributes
     {
         try {
-            $resourceType = $this->pathToResourceType($path);
-            $publicId = $this->pathToPublicId($path, $resourceType);
-            $this->client->adminApi()->asset($publicId, [
-                "resource_type" => $resourceType,
-            ]);
-            return new FileAttributes($path, null, Visibility::PUBLIC);
+            $this->resource($path);
+
+            return new FileAttributes($path, visibility: Visibility::PUBLIC);
         } catch (Throwable $e) {
             throw UnableToRetrieveMetadata::visibility($path, $e->getMessage(), $e);
         }
@@ -204,17 +193,14 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     public function mimeType(string $path): FileAttributes
     {
         try {
-            $resourceType = $this->pathToResourceType($path);
-            $publicId = $this->pathToPublicId($path, $resourceType);
-            $response = $this->client->adminApi()->asset($publicId, [
-                "resource_type" => $resourceType,
-            ]);
-            $detector = new FinfoMimeTypeDetector();
-            $mimeType = $detector->detectMimeTypeFromPath($path);
+            $this->resource($path);
+            $mimeType = $this->mimeTypeDetector->detectMimeTypeFromPath($path);
+
             if ($mimeType === null) {
                 throw UnableToRetrieveMetadata::mimeType($path);
             }
-            return new FileAttributes($path, null, null, null, $mimeType);
+
+            return new FileAttributes($path, mimeType: $mimeType);
         } catch (Throwable $e) {
             throw UnableToRetrieveMetadata::mimeType($path, $e->getMessage(), $e);
         }
@@ -223,15 +209,10 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     public function lastModified(string $path): FileAttributes
     {
         try {
-            $resourceType = $this->pathToResourceType($path);
-            $publicId = $this->pathToPublicId($path, $resourceType);
-            $response = $this->client->adminApi()->asset($publicId, [
-                "resource_type" => $resourceType,
-            ]);
-            $lastModified = strtotime(
-                $response["last_updated"]["updated_at"] ?? $response["created_at"]
-            );
-            return new FileAttributes($path, null, null, $lastModified);
+            $resource = $this->resource($path);
+            $lastModified = strtotime($resource['created_at']);
+
+            return new FileAttributes($path, lastModified: $lastModified);
         } catch (Throwable $e) {
             throw UnableToRetrieveMetadata::lastModified($path, $e->getMessage(), $e);
         }
@@ -240,47 +221,109 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     public function fileSize(string $path): FileAttributes
     {
         try {
-            $resourceType = $this->pathToResourceType($path);
-            $publicId = $this->pathToPublicId($path, $resourceType);
-            $response = $this->client->adminApi()->asset($publicId, [
-                "resource_type" => $resourceType,
-            ]);
-            $fileSize = $response["bytes"];
-            return new FileAttributes($path, $fileSize);
+            $resource = $this->resource($path);
+            $fileSize = $resource["bytes"];
+
+            return new FileAttributes($path, fileSize: $fileSize);
         } catch (Throwable $e) {
             throw UnableToRetrieveMetadata::fileSize($path, $e->getMessage(), $e);
         }
     }
 
-    private function mapResourceAttributes(array $resource): FileAttributes
+    public function listContents(string $path, bool $deep): iterable
     {
-        $path = $resource["resource_type"] === "raw" ? $resource["public_id"] : $resource["public_id"] . "." . $resource["format"];
-        if ($this->dynamicFolders) {
-            if ($resource["asset_folder"] !== "") {
-                $path = $resource["asset_folder"] . "/" . $path;
-            }
-        }
-        $fileSize = $resource["bytes"];
-        $visibility = "public";
-        $lastModified = strtotime($resource["last_updated"]["updated_at"] ?? $resource["created_at"]);
-        $mimeType = $this->mimeTypeDetector->detectMimeTypeFromPath($path);
+        try {
+            if ($this->dynamicFolders) {
+                foreach ($this->listFilesByDynamicFolder($path) as $fileAttributes) {
+                    yield $fileAttributes;
+                }
 
-        return new FileAttributes(
-            $path,
-            $fileSize,
-            $visibility,
-            $lastModified,
-            $mimeType
-        );
+                foreach ($this->listFolders($path, $deep) as $directoryAttributes) {
+                    yield $directoryAttributes;
+
+                    if ($deep) {
+                        foreach ($this->listFilesByDynamicFolder($directoryAttributes->path()) as $fileAttributes) {
+                            yield $fileAttributes;
+                        }
+                    }
+                }
+            } else {
+                foreach ($this->listFilesByFixedFolder($path, $deep) as $fileAttributes) {
+                    yield $fileAttributes;
+                }
+
+                foreach ($this->listFolders($path, $deep) as $directoryAttributes) {
+                    yield $directoryAttributes;
+                }
+            }
+        } catch (Throwable $e) {
+            throw UnableToListContents::atLocation($path, $deep, $e);
+        }
     }
 
-    private function mapFolderAttributes(array $folder): DirectoryAttributes
+    public function move(string $source, string $destination, Config $config): void
     {
-        $path = $folder["path"];
+        try {
+            $sourceResourceType = $this->resourceType($source);
+            $sourcePublicId = $this->publicId($source, $sourceResourceType);
 
-        return new DirectoryAttributes(
-            $path
-        );
+            $destinationResourceType = $this->resourceType($destination);
+            $destinationPublicId = $this->publicId($destination, $destinationResourceType);
+
+            $options = [
+                "resource_type" => $destinationResourceType,
+                "overwrite" => true,
+                "invalidate" => true,
+            ];
+
+            if ($this->dynamicFolders && ($folder = $this->folder($destination)) !== '') {
+                $options['asset_folder'] = $folder;
+            }
+
+            if ($destinationPublicId === $sourcePublicId) {
+                $this->client->adminApi()->update($sourcePublicId, $options);        
+            } else {
+                $this->client->uploadApi()->rename($sourcePublicId, $destinationPublicId, $options);
+            }
+        } catch (Throwable $e) {
+            throw UnableToMoveFile::fromLocationTo($source, $destination, $e);
+        }
+    }
+
+    public function copy(string $source, string $destination, Config $config): void
+    {
+        try {
+            $this->writeStream($destination, $this->readStream($source), $config);
+        } catch (Throwable $e) {
+            throw UnableToCopyFile::fromLocationTo($source, $destination, $e);
+        }
+    }
+
+    public function publicUrl(string $path, Config $config): string
+    {
+        try {
+            $resourceType = $this->resourceType($path);
+            $publicId = $this->publicId($path, $resourceType);
+
+            $resource = $this->client->adminApi()->asset($publicId, [
+                "resource_type" => $resourceType,
+            ]);
+
+            return $resource['secure_url'];
+        } catch (Throwable $e) {
+            throw UnableToGeneratePublicUrl::dueToError($path, $e);
+        }
+    }
+
+    private function resource(string $path): ApiResponse
+    {
+        $resourceType = $this->resourceType($path);
+        $publicId = $this->publicId($path, $resourceType);
+
+        return $this->client->uploadApi()->explicit($publicId, [
+            "resource_type" => $resourceType,
+            "type" => "upload",
+        ]);
     }
 
     private function listFilesByDynamicFolder(string $path): Generator
@@ -352,146 +395,147 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
         } while (isset($response['next_cursor']));
     }
 
-    public function listContents(string $path, bool $deep): iterable
+    private function mapResourceAttributes(array $resource): FileAttributes
     {
-        try {
-            if ($this->dynamicFolders) {
-                foreach ($this->listFilesByDynamicFolder($path) as $fileAttributes) {
-                    yield $fileAttributes;
-                }
+        $path = $resource["public_id"];
 
-                foreach ($this->listFolders($path, $deep) as $directoryAttributes) {
-                    yield $directoryAttributes;
-
-                    if ($deep) {
-                        foreach ($this->listFilesByDynamicFolder($directoryAttributes->path()) as $fileAttributes) {
-                            yield $fileAttributes;
-                        }
-                    }
-                }
-            } else {
-                foreach ($this->listFilesByFixedFolder($path, $deep) as $fileAttributes) {
-                    yield $fileAttributes;
-                }
-
-                foreach ($this->listFolders($path, $deep) as $directoryAttributes) {
-                    yield $directoryAttributes;
-                }
-            }
-        } catch (Throwable $e) {
-            throw UnableToListContents::atLocation($path, $deep, $e);
-        }
-    }
-
-    public function move(string $source, string $destination, Config $config): void
-    {
-        try {
-            $resourceType = $this->pathToResourceType($source);
-            $publicId = $this->pathToPublicId($source, $resourceType);
-            $newResourceType = $this->pathToResourceType($destination);
-            $newPublicId = $this->pathToPublicId($destination, $newResourceType);
-            $options = [
-                "invalidate" => true,
-                "overwrite" => true,
-                "resource_type" => $newResourceType,
-            ];
-            if ($this->dynamicFolders) {
-                $folder = $this->pathToFolder($destination);
-                if ($folder !== "" && $folder !== ".") {
-                    $options["asset_folder"] = $folder;
-                }
-            }
-            if ($newPublicId === $publicId) {
-                $this->client->adminApi()->update($publicId, $options);        
-            } else {
-                $this->client->uploadApi()->rename($publicId, $newPublicId, $options);
-            }
-        } catch (Throwable $e) {
-            throw UnableToMoveFile::fromLocationTo($source, $destination, $e);
-        }
-    }
-
-    public function copy(string $source, string $destination, Config $config): void
-    {
-        try {
-            $resourceType = $this->pathToResourceType($source);
-            $publicId = $this->pathToPublicId($source, $resourceType);
-            $url = $this->pathToUrl($publicId, $resourceType);
-            $newResourceType = $this->pathToResourceType($destination);
-            $newPublicId = $this->pathToPublicId($destination, $newResourceType);
-            $options = [
-                "overwrite" => true,
-                "public_id" => $newPublicId,
-                "resource_type" => $newResourceType,
-            ];
-            if ($this->dynamicFolders) {
-                $folder = $this->pathToFolder($destination);
-                if ($folder !== "" && $folder !== ".") {
-                    $options["asset_folder"] = $folder;
-                }
-            }
-            $this->client->uploadApi()->upload($url, $options);
-        } catch (Throwable $e) {
-            throw UnableToCopyFile::fromLocationTo($source, $destination, $e);
-        }
-    }
-
-    public function publicUrl(string $path, Config $config): string
-    {
-        try {
-            $resourceType = $this->pathToResourceType($path);
-            $publicId = $this->pathToPublicId($path, $resourceType);
-            $resource = $this->client->adminApi()->asset($publicId, [
-                "resource_type" => $resourceType,
-            ]);
-
-            return $resource['secure_url'];
-        } catch (Throwable $e) {
-            throw UnableToGeneratePublicUrl::dueToError($path, $e);
-        }
-    }
-
-    private function pathToUrl(string $publicId, string $resourceType): string
-    {
-        return $this->client->$resourceType($publicId)->toUrl();
-    }
-
-    private function pathToPublicId(string $path, string $resourceType): string
-    {
-        // For resources of type 'raw', the extension is included in the Public ID.
-        if ($resourceType === AssetType::RAW) {
-            return $this->dynamicFolders ? pathinfo($path, PATHINFO_BASENAME) : $path;
+        if ($resource["resource_type"] !== AssetType::RAW) {
+            $path .= "." . $resource["format"];
         }
 
-        // For resources of type 'image' or 'video', the extension is excluded from the Public ID.
+        if ($this->dynamicFolders && $resource["asset_folder"] !== "") {
+            $path = $resource["asset_folder"] . "/" . $path;
+        }
+
+        $fileSize = $resource["bytes"];
+        $visibility = "public";
+        $lastModified = strtotime($resource["created_at"]);
+        $mimeType = $this->mimeTypeDetector->detectMimeTypeFromPath($path);
+
+        return new FileAttributes(
+            $path,
+            $fileSize,
+            $visibility,
+            $lastModified,
+            $mimeType
+        );
+    }
+
+    private function mapFolderAttributes(array $folder): DirectoryAttributes
+    {
+        $path = $folder["path"];
+
+        return new DirectoryAttributes(
+            $path
+        );
+    }
+
+    private function resourceType(string $path): string
+    {
+        $assetTypes = [
+            // Image formats
+            "3ds" => AssetType::IMAGE,
+            "ai" => AssetType::IMAGE,
+            "arw" => AssetType::IMAGE,
+            "avif" => AssetType::IMAGE,
+            "bmp" => AssetType::IMAGE,
+            "bw" => AssetType::IMAGE,
+            "cr2" => AssetType::IMAGE,
+            "cr3" => AssetType::IMAGE,
+            "djvu" => AssetType::IMAGE,
+            "dng" => AssetType::IMAGE,
+            "eps" => AssetType::IMAGE,
+            "eps3" => AssetType::IMAGE,
+            "ept" => AssetType::IMAGE,
+            "fbx" => AssetType::IMAGE,
+            "flif" => AssetType::IMAGE,
+            "gif" => AssetType::IMAGE,
+            "glb" => AssetType::IMAGE,
+            "gltf" => AssetType::IMAGE,
+            "hdp" => AssetType::IMAGE,
+            "heic" => AssetType::IMAGE,
+            "heif" => AssetType::IMAGE,
+            "ico" => AssetType::IMAGE,
+            "indd" => AssetType::IMAGE,
+            "jp2" => AssetType::IMAGE,
+            "jpe" => AssetType::IMAGE,
+            "jpeg" => AssetType::IMAGE,
+            "jpg" => AssetType::IMAGE,
+            "jxl" => AssetType::IMAGE,
+            "jxr" => AssetType::IMAGE,
+            "obj" => AssetType::IMAGE,
+            "pdf" => AssetType::IMAGE,
+            "ply" => AssetType::IMAGE,
+            "png" => AssetType::IMAGE,
+            "ps" => AssetType::IMAGE,
+            "psd" => AssetType::IMAGE,
+            "svg" => AssetType::IMAGE,
+            "tga" => AssetType::IMAGE,
+            "tif" => AssetType::IMAGE,
+            "tiff" => AssetType::IMAGE,
+            "u3ma" => AssetType::IMAGE,
+            "usdz" => AssetType::IMAGE,
+            "wdp" => AssetType::IMAGE,
+            "webp" => AssetType::IMAGE,
+
+            // Video formats
+            "3g2" => AssetType::VIDEO,
+            "3gp" => AssetType::VIDEO,
+            "avi" => AssetType::VIDEO,
+            "flv" => AssetType::VIDEO,
+            "m2ts" => AssetType::VIDEO,
+            "mkv" => AssetType::VIDEO,
+            "mov" => AssetType::VIDEO,
+            "mp4" => AssetType::VIDEO,
+            "mpeg" => AssetType::VIDEO,
+            "mts" => AssetType::VIDEO,
+            "mxf" => AssetType::VIDEO,
+            "ogv" => AssetType::VIDEO,
+            "ts" => AssetType::VIDEO,
+            "webm" => AssetType::VIDEO,
+            "wmv" => AssetType::VIDEO,
+
+            // Audio formats
+            "aac" => AssetType::VIDEO,
+            "aiff" => AssetType::VIDEO,
+            "amr" => AssetType::VIDEO,
+            "flac" => AssetType::VIDEO,
+            "m4a" => AssetType::VIDEO,
+            "mp3" => AssetType::VIDEO,
+            "ogg" => AssetType::VIDEO,
+            "opus" => AssetType::VIDEO,
+            "wav" => AssetType::VIDEO,
+        ];
+
+        $extension = pathinfo($path, PATHINFO_EXTENSION);
+
+        return $assetTypes[$extension] ?? AssetType::RAW;
+    }
+
+    private function publicId(string $path, string $resourceType): string
+    {
         $pathInfo = pathinfo($path);
         $dirname = $pathInfo["dirname"];
         $filename = $pathInfo["filename"];
-        return $dirname !== "." && !$this->dynamicFolders ? "$dirname/$filename" : $filename;
-    }
+        $extension = $pathInfo["extension"];
 
-    private function pathToResourceType(string $path): string
-    {
-        $mimeType = $this->mimeTypeDetector->detectMimeTypeFromPath($path);
+        $publicId = $filename;
 
-        if ($mimeType === null) {
-            return AssetType::RAW;
+        if ($resourceType === AssetType::RAW) {
+            $publicId .= ".$extension";
         }
 
-        switch (true) {
-            case str_starts_with($mimeType, "image/"):
-            case $mimeType === "application/pdf":
-                return AssetType::IMAGE;
-            case str_starts_with($mimeType, "video/"):
-            case str_starts_with($mimeType, "audio/"):
-                return AssetType::VIDEO;
-            default:
-                return AssetType::RAW;
+        if (!$this->dynamicFolders && $dirname !== ".") {
+            $publicId = "$dirname/$publicId";
         }
+
+        return $publicId;
     }
 
-    private function pathToFolder(string $path): string
+    private function folder(string $path): string
     {
-        return pathinfo($path, PATHINFO_DIRNAME);
+        $dirname = pathinfo($path, PATHINFO_DIRNAME);
+
+        return $dirname === '.' ? "" : $dirname;
     }
 }
