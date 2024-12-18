@@ -35,26 +35,29 @@ $filesystem = new Filesystem($adapater);
 
 ### Storing assets in a subfolder
 
-By default, the root folder of the filesystem corresponds to Cloudinary's root folder. If you prefer to store your assets in a subfolder on Cloudinary, you can provide a second argument to the Cloudinary adapter.
+By default, the root folder of the filesystem corresponds to Cloudinary's root folder. If you prefer to store your assets in a subfolder on Cloudinary, you can create a path-prefixed adapter.
 
 ```php
+use League\Flysystem\PathPrefixng\PathPrefixedAdapter;
+
 $adapter = new CloudinaryAdapter($client, 'path/to/folder');
+$pathPrefixedAdapter = new PathPrefixedAdapter($adapter, 'path/to/folder');
 ```
 
 ### Customizing mime type detection
 
-By default, the adapter employs `League\MimeTypeDetection\FinfoMimeTypeDetector` for mime type detection and setting the resource type accordingly. If you wish to modify this behavior, you can supply a third argument to the Cloudinary adapter, implementing `League\MimeTypeDetection\MimeTypeDetector`.
+By default, the adapter employs `League\MimeTypeDetection\FinfoMimeTypeDetector` for mime type detection and setting the resource type accordingly. If you wish to modify this behavior, you can supply a second argument to the Cloudinary adapter, implementing `League\MimeTypeDetection\MimeTypeDetector`.
 
 ```php
-$adapter = new CloudinaryAdapter($client, '', $mimeTypeDetector);
+$adapter = new CloudinaryAdapter($client, $mimeTypeDetector);
 ```
 
 ### Enabling dynamic folders mode.
 
-By default, the adapter operates under the assumption that your Cloudinary cloud uses fixed folder mode. If you wish to support [dynamic folders](https://cloudinary.com/documentation/dynamic_folders), set the fourth argument to `true`.
+By default, the adapter operates under the assumption that your Cloudinary cloud uses fixed folder mode. If you wish to support [dynamic folders](https://cloudinary.com/documentation/dynamic_folders), set the third argument to `true`.
 
 ```php
-$adapter = new CloudinaryAdapter($client, '', null, true);
+$adapter = new CloudinaryAdapter($client, null, true);
 ```
 
 ## Limitations

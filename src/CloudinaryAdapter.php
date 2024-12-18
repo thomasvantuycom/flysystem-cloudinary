@@ -23,7 +23,6 @@ use League\Flysystem\UnableToSetVisibility;
 use League\Flysystem\Visibility;
 use League\MimeTypeDetection\FinfoMimeTypeDetector;
 use GuzzleHttp\Psr7\Utils;
-use League\Flysystem\PathPrefixer;
 use League\Flysystem\UnableToCopyFile;
 use League\MimeTypeDetection\MimeTypeDetector;
 use Throwable;
@@ -32,18 +31,15 @@ use Generator;
 class CloudinaryAdapter implements FilesystemAdapter
 {
     private Cloudinary $client;
-    private PathPrefixer $prefixer;
     private MimeTypeDetector $mimeTypeDetector;
     private bool $dynamicFolders;
 
     public function __construct(
         Cloudinary $client,
-        string $prefix = "",
         MimeTypeDetector $mimeTypeDetector = null,
         bool $dynamicFolders = false
     ) {
         $this->client = $client;
-        $this->prefixer = new PathPrefixer($prefix);
         $this->mimeTypeDetector = $mimeTypeDetector ?? new FinfoMimeTypeDetector();
         $this->dynamicFolders = $dynamicFolders;
     }
@@ -71,8 +67,6 @@ class CloudinaryAdapter implements FilesystemAdapter
     public function directoryExists(string $path): bool
     {
         try {
-            $path = $this->prefixer->prefixPath($path);
-
             $this->client->adminApi()->subFolders($path, [
                 'max_results' => 1,
             ]);
@@ -177,7 +171,6 @@ class CloudinaryAdapter implements FilesystemAdapter
     public function createDirectory(string $path, Config $config): void
     {
         try {
-            $path = $this->prefixer->prefixPath($path);
             $this->client->adminApi()->createFolder($path);
         } catch (Throwable $e) {
             throw UnableToCreateDirectory::atLocation($path, $e->getMessage(), $e);
@@ -265,7 +258,6 @@ class CloudinaryAdapter implements FilesystemAdapter
                 $path = $resource["asset_folder"] . "/" . $path;
             }
         }
-        $path = $this->prefixer->stripPrefix($path);
         $fileSize = $resource["bytes"];
         $visibility = "public";
         $lastModified = strtotime($resource["last_updated"]["updated_at"] ?? $resource["created_at"]);
@@ -283,7 +275,6 @@ class CloudinaryAdapter implements FilesystemAdapter
     private function mapFolderAttributes(array $folder): DirectoryAttributes
     {
         $path = $folder["path"];
-        $path = $this->prefixer->stripPrefix($path);
 
         return new DirectoryAttributes(
             $path
@@ -292,8 +283,6 @@ class CloudinaryAdapter implements FilesystemAdapter
 
     private function listFilesByDynamicFolder(string $path): Generator
     {
-        $path = $this->prefixer->prefixPath($path);
-
         do {
             $response = $this->client->adminApi()->assetsByAssetFolder($path, [
                 "max_results" => 500,
@@ -309,8 +298,6 @@ class CloudinaryAdapter implements FilesystemAdapter
 
     private function listFilesByFixedFolder(string $path, bool $deep): Generator
     {
-        $path = $this->prefixer->prefixPath($path);
-
         foreach ([AssetType::IMAGE, AssetType::VIDEO, AssetType::RAW] as $resourceType) {
             do {
                 $response = $this->client->adminApi()->assets([
@@ -338,8 +325,6 @@ class CloudinaryAdapter implements FilesystemAdapter
 
     private function listFolders(string $path, bool $deep): Generator
     {
-        $path = $this->prefixer->prefixPath($path);
-
         do {
             if ($path === "") {
                 $response = $this->client->adminApi()->rootFolders([
@@ -456,7 +441,6 @@ class CloudinaryAdapter implements FilesystemAdapter
 
     private function pathToPublicId(string $path, string $resourceType): string
     {
-        $path = $this->prefixer->prefixPath($path);
         // For resources of type 'raw', the extension is included in the Public ID.
         if ($resourceType === AssetType::RAW) {
             return $this->dynamicFolders ? pathinfo($path, PATHINFO_BASENAME) : $path;
@@ -491,7 +475,6 @@ class CloudinaryAdapter implements FilesystemAdapter
 
     private function pathToFolder(string $path): string
     {
-        $path = $this->prefixer->prefixPath($path);
         return pathinfo($path, PATHINFO_DIRNAME);
     }
 }
