@@ -3,15 +3,17 @@
 namespace ThomasVantuycom\FlysystemCloudinary;
 
 use Cloudinary\Api\ApiResponse;
-use Cloudinary\Cloudinary;
 use Cloudinary\Api\Exception\NotFound;
 use Cloudinary\Asset\AssetType;
+use Cloudinary\Cloudinary;
+use Generator;
 use League\Flysystem\Config;
 use League\Flysystem\DirectoryAttributes;
 use League\Flysystem\FileAttributes;
 use League\Flysystem\FilesystemAdapter;
 use League\Flysystem\UnableToCheckDirectoryExistence;
 use League\Flysystem\UnableToCheckFileExistence;
+use League\Flysystem\UnableToCopyFile;
 use League\Flysystem\UnableToCreateDirectory;
 use League\Flysystem\UnableToDeleteDirectory;
 use League\Flysystem\UnableToDeleteFile;
@@ -20,20 +22,20 @@ use League\Flysystem\UnableToListContents;
 use League\Flysystem\UnableToMoveFile;
 use League\Flysystem\UnableToReadFile;
 use League\Flysystem\UnableToRetrieveMetadata;
-use League\Flysystem\UnableToWriteFile;
 use League\Flysystem\UnableToSetVisibility;
+use League\Flysystem\UnableToWriteFile;
 use League\Flysystem\UrlGeneration\PublicUrlGenerator;
 use League\Flysystem\Visibility;
 use League\MimeTypeDetection\FinfoMimeTypeDetector;
-use League\Flysystem\UnableToCopyFile;
 use League\MimeTypeDetection\MimeTypeDetector;
 use Throwable;
-use Generator;
 
 class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
 {
     private Cloudinary $client;
+
     private MimeTypeDetector $mimeTypeDetector;
+
     private bool $dynamicFolders;
 
     public function __construct(
@@ -57,7 +59,6 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
         } catch (Throwable $e) {
             throw UnableToCheckFileExistence::forLocation($path, $e);
         }
-        return true;
     }
 
     public function directoryExists(string $path): bool
@@ -95,11 +96,11 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
             $publicId = $this->publicId($path, $resourceType);
 
             $options = [
-                "public_id" => $publicId,
-                "resource_type" => $resourceType,
-                "filename" => $path,
-                "overwrite" => true,
-                "invalidate" => true,
+                'public_id' => $publicId,
+                'resource_type' => $resourceType,
+                'filename' => $path,
+                'overwrite' => true,
+                'invalidate' => true,
             ];
 
             if ($this->dynamicFolders && ($folder = $this->folder($path)) !== '') {
@@ -128,7 +129,7 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
         try {
             $publicUrl = $this->publicUrl($path, new Config());
 
-            return fopen($publicUrl, "rb");
+            return fopen($publicUrl, 'rb');
         } catch (Throwable $e) {
             throw UnableToReadFile::fromLocation($path, $e->getMessage(), $e);
         }
@@ -141,9 +142,9 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
             $publicId = $this->publicId($path, $resourceType);
 
             $this->client->uploadApi()->destroy($publicId, [
-                "resource_type" => $resourceType,
-                "type" => "upload",
-                "invalidate" => true,
+                'resource_type' => $resourceType,
+                'type' => 'upload',
+                'invalidate' => true,
             ]);
         } catch (Throwable $e) {
             throw UnableToDeleteFile::atLocation($path, $e->getMessage(), $e);
@@ -176,7 +177,7 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
 
     public function setVisibility(string $path, string $visibility): void
     {
-        throw UnableToSetVisibility::atLocation($path, "Cloudinary does not support this operation.");
+        throw UnableToSetVisibility::atLocation($path, 'Cloudinary does not support this operation.');
     }
 
     public function visibility(string $path): FileAttributes
@@ -222,7 +223,7 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     {
         try {
             $resource = $this->resource($path);
-            $fileSize = $resource["bytes"];
+            $fileSize = $resource['bytes'];
 
             return new FileAttributes($path, fileSize: $fileSize);
         } catch (Throwable $e) {
@@ -271,9 +272,9 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
             $destinationPublicId = $this->publicId($destination, $destinationResourceType);
 
             $options = [
-                "resource_type" => $destinationResourceType,
-                "overwrite" => true,
-                "invalidate" => true,
+                'resource_type' => $destinationResourceType,
+                'overwrite' => true,
+                'invalidate' => true,
             ];
 
             if ($this->dynamicFolders && ($folder = $this->folder($destination)) !== '') {
@@ -281,7 +282,7 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
             }
 
             if ($destinationPublicId === $sourcePublicId) {
-                $this->client->adminApi()->update($sourcePublicId, $options);        
+                $this->client->adminApi()->update($sourcePublicId, $options);
             } else {
                 $this->client->uploadApi()->rename($sourcePublicId, $destinationPublicId, $options);
             }
@@ -306,7 +307,7 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
             $publicId = $this->publicId($path, $resourceType);
 
             $resource = $this->client->adminApi()->asset($publicId, [
-                "resource_type" => $resourceType,
+                'resource_type' => $resourceType,
             ]);
 
             return $resource['secure_url'];
@@ -321,8 +322,8 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
         $publicId = $this->publicId($path, $resourceType);
 
         return $this->client->uploadApi()->explicit($publicId, [
-            "resource_type" => $resourceType,
-            "type" => "upload",
+            'resource_type' => $resourceType,
+            'type' => 'upload',
         ]);
     }
 
@@ -330,15 +331,15 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     {
         do {
             $response = $this->client->adminApi()->assetsByAssetFolder($path, [
-                "max_results" => 500,
-                "next_cursor" => $response["next_cursor"] ?? null,
+                'max_results' => 500,
+                'next_cursor' => $response['next_cursor'] ?? null,
             ]);
 
             foreach ($response['resources'] as $resource) {
                 yield $this->mapResourceAttributes($resource);
             }
 
-        } while (isset($response["next_cursor"]));
+        } while (isset($response['next_cursor']));
     }
 
     private function listFilesByFixedFolder(string $path, bool $deep): Generator
@@ -346,40 +347,40 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
         foreach ([AssetType::IMAGE, AssetType::VIDEO, AssetType::RAW] as $resourceType) {
             do {
                 $response = $this->client->adminApi()->assets([
-                    "resource_type" => $resourceType,
-                    "type" => "upload",
-                    "prefix" => $path === "" ? "" : $path . "/",
-                    "max_results" => 500,
-                    "next_cursor" => $response["next_cursor"] ?? null,
+                    'resource_type' => $resourceType,
+                    'type' => 'upload',
+                    'prefix' => $path === '' ? '' : $path . '/',
+                    'max_results' => 500,
+                    'next_cursor' => $response['next_cursor'] ?? null,
                 ]);
 
-                foreach ($response["resources"] as $resource) {
-                    if (!$deep && $resource["folder"] !== $path) {
+                foreach ($response['resources'] as $resource) {
+                    if (! $deep && $resource['folder'] !== $path) {
                         continue;
                     }
 
-                    if (!empty($resource["placeholder"])) {
+                    if (! empty($resource['placeholder'])) {
                         continue;
                     }
 
                     yield $this->mapResourceAttributes($resource);
                 }
-            } while (isset($response["next_cursor"]));
+            } while (isset($response['next_cursor']));
         }
     }
 
     private function listFolders(string $path, bool $deep): Generator
     {
         do {
-            if ($path === "") {
+            if ($path === '') {
                 $response = $this->client->adminApi()->rootFolders([
-                    "max_results" => 500,
-                    "next_cursor" => $response["next_cursor"] ?? null,
+                    'max_results' => 500,
+                    'next_cursor' => $response['next_cursor'] ?? null,
                 ]);
             } else {
                 $response = $this->client->adminApi()->subFolders($path, [
-                    "max_results" => 500,
-                    "next_cursor" => $response["next_cursor"] ?? null,
+                    'max_results' => 500,
+                    'next_cursor' => $response['next_cursor'] ?? null,
                 ]);
             }
 
@@ -397,19 +398,19 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
 
     private function mapResourceAttributes(array $resource): FileAttributes
     {
-        $path = $resource["public_id"];
+        $path = $resource['public_id'];
 
-        if ($resource["resource_type"] !== AssetType::RAW) {
-            $path .= "." . $resource["format"];
+        if ($resource['resource_type'] !== AssetType::RAW) {
+            $path .= '.' . $resource['format'];
         }
 
-        if ($this->dynamicFolders && $resource["asset_folder"] !== "") {
-            $path = $resource["asset_folder"] . "/" . $path;
+        if ($this->dynamicFolders && $resource['asset_folder'] !== '') {
+            $path = $resource['asset_folder'] . '/' . $path;
         }
 
-        $fileSize = $resource["bytes"];
-        $visibility = "public";
-        $lastModified = strtotime($resource["created_at"]);
+        $fileSize = $resource['bytes'];
+        $visibility = 'public';
+        $lastModified = strtotime($resource['created_at']);
         $mimeType = $this->mimeTypeDetector->detectMimeTypeFromPath($path);
 
         return new FileAttributes(
@@ -423,7 +424,7 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
 
     private function mapFolderAttributes(array $folder): DirectoryAttributes
     {
-        $path = $folder["path"];
+        $path = $folder['path'];
 
         return new DirectoryAttributes(
             $path
@@ -434,77 +435,77 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     {
         $assetTypes = [
             // Image formats
-            "3ds" => AssetType::IMAGE,
-            "ai" => AssetType::IMAGE,
-            "arw" => AssetType::IMAGE,
-            "avif" => AssetType::IMAGE,
-            "bmp" => AssetType::IMAGE,
-            "bw" => AssetType::IMAGE,
-            "cr2" => AssetType::IMAGE,
-            "cr3" => AssetType::IMAGE,
-            "djvu" => AssetType::IMAGE,
-            "dng" => AssetType::IMAGE,
-            "eps" => AssetType::IMAGE,
-            "eps3" => AssetType::IMAGE,
-            "ept" => AssetType::IMAGE,
-            "fbx" => AssetType::IMAGE,
-            "flif" => AssetType::IMAGE,
-            "gif" => AssetType::IMAGE,
-            "glb" => AssetType::IMAGE,
-            "gltf" => AssetType::IMAGE,
-            "hdp" => AssetType::IMAGE,
-            "heic" => AssetType::IMAGE,
-            "heif" => AssetType::IMAGE,
-            "ico" => AssetType::IMAGE,
-            "indd" => AssetType::IMAGE,
-            "jp2" => AssetType::IMAGE,
-            "jpe" => AssetType::IMAGE,
-            "jpeg" => AssetType::IMAGE,
-            "jpg" => AssetType::IMAGE,
-            "jxl" => AssetType::IMAGE,
-            "jxr" => AssetType::IMAGE,
-            "obj" => AssetType::IMAGE,
-            "pdf" => AssetType::IMAGE,
-            "ply" => AssetType::IMAGE,
-            "png" => AssetType::IMAGE,
-            "ps" => AssetType::IMAGE,
-            "psd" => AssetType::IMAGE,
-            "svg" => AssetType::IMAGE,
-            "tga" => AssetType::IMAGE,
-            "tif" => AssetType::IMAGE,
-            "tiff" => AssetType::IMAGE,
-            "u3ma" => AssetType::IMAGE,
-            "usdz" => AssetType::IMAGE,
-            "wdp" => AssetType::IMAGE,
-            "webp" => AssetType::IMAGE,
+            '3ds' => AssetType::IMAGE,
+            'ai' => AssetType::IMAGE,
+            'arw' => AssetType::IMAGE,
+            'avif' => AssetType::IMAGE,
+            'bmp' => AssetType::IMAGE,
+            'bw' => AssetType::IMAGE,
+            'cr2' => AssetType::IMAGE,
+            'cr3' => AssetType::IMAGE,
+            'djvu' => AssetType::IMAGE,
+            'dng' => AssetType::IMAGE,
+            'eps' => AssetType::IMAGE,
+            'eps3' => AssetType::IMAGE,
+            'ept' => AssetType::IMAGE,
+            'fbx' => AssetType::IMAGE,
+            'flif' => AssetType::IMAGE,
+            'gif' => AssetType::IMAGE,
+            'glb' => AssetType::IMAGE,
+            'gltf' => AssetType::IMAGE,
+            'hdp' => AssetType::IMAGE,
+            'heic' => AssetType::IMAGE,
+            'heif' => AssetType::IMAGE,
+            'ico' => AssetType::IMAGE,
+            'indd' => AssetType::IMAGE,
+            'jp2' => AssetType::IMAGE,
+            'jpe' => AssetType::IMAGE,
+            'jpeg' => AssetType::IMAGE,
+            'jpg' => AssetType::IMAGE,
+            'jxl' => AssetType::IMAGE,
+            'jxr' => AssetType::IMAGE,
+            'obj' => AssetType::IMAGE,
+            'pdf' => AssetType::IMAGE,
+            'ply' => AssetType::IMAGE,
+            'png' => AssetType::IMAGE,
+            'ps' => AssetType::IMAGE,
+            'psd' => AssetType::IMAGE,
+            'svg' => AssetType::IMAGE,
+            'tga' => AssetType::IMAGE,
+            'tif' => AssetType::IMAGE,
+            'tiff' => AssetType::IMAGE,
+            'u3ma' => AssetType::IMAGE,
+            'usdz' => AssetType::IMAGE,
+            'wdp' => AssetType::IMAGE,
+            'webp' => AssetType::IMAGE,
 
             // Video formats
-            "3g2" => AssetType::VIDEO,
-            "3gp" => AssetType::VIDEO,
-            "avi" => AssetType::VIDEO,
-            "flv" => AssetType::VIDEO,
-            "m2ts" => AssetType::VIDEO,
-            "mkv" => AssetType::VIDEO,
-            "mov" => AssetType::VIDEO,
-            "mp4" => AssetType::VIDEO,
-            "mpeg" => AssetType::VIDEO,
-            "mts" => AssetType::VIDEO,
-            "mxf" => AssetType::VIDEO,
-            "ogv" => AssetType::VIDEO,
-            "ts" => AssetType::VIDEO,
-            "webm" => AssetType::VIDEO,
-            "wmv" => AssetType::VIDEO,
+            '3g2' => AssetType::VIDEO,
+            '3gp' => AssetType::VIDEO,
+            'avi' => AssetType::VIDEO,
+            'flv' => AssetType::VIDEO,
+            'm2ts' => AssetType::VIDEO,
+            'mkv' => AssetType::VIDEO,
+            'mov' => AssetType::VIDEO,
+            'mp4' => AssetType::VIDEO,
+            'mpeg' => AssetType::VIDEO,
+            'mts' => AssetType::VIDEO,
+            'mxf' => AssetType::VIDEO,
+            'ogv' => AssetType::VIDEO,
+            'ts' => AssetType::VIDEO,
+            'webm' => AssetType::VIDEO,
+            'wmv' => AssetType::VIDEO,
 
             // Audio formats
-            "aac" => AssetType::VIDEO,
-            "aiff" => AssetType::VIDEO,
-            "amr" => AssetType::VIDEO,
-            "flac" => AssetType::VIDEO,
-            "m4a" => AssetType::VIDEO,
-            "mp3" => AssetType::VIDEO,
-            "ogg" => AssetType::VIDEO,
-            "opus" => AssetType::VIDEO,
-            "wav" => AssetType::VIDEO,
+            'aac' => AssetType::VIDEO,
+            'aiff' => AssetType::VIDEO,
+            'amr' => AssetType::VIDEO,
+            'flac' => AssetType::VIDEO,
+            'm4a' => AssetType::VIDEO,
+            'mp3' => AssetType::VIDEO,
+            'ogg' => AssetType::VIDEO,
+            'opus' => AssetType::VIDEO,
+            'wav' => AssetType::VIDEO,
         ];
 
         $extension = pathinfo($path, PATHINFO_EXTENSION);
@@ -515,18 +516,18 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     private function publicId(string $path, string $resourceType): string
     {
         $pathInfo = pathinfo($path);
-        $dirname = $pathInfo["dirname"];
-        $filename = $pathInfo["filename"];
-        $extension = $pathInfo["extension"];
+        $dirname = $pathInfo['dirname'];
+        $filename = $pathInfo['filename'];
+        $extension = $pathInfo['extension'];
 
         $publicId = $filename;
 
         if ($resourceType === AssetType::RAW) {
-            $publicId .= ".$extension";
+            $publicId .= ".{$extension}";
         }
 
-        if (!$this->dynamicFolders && $dirname !== ".") {
-            $publicId = "$dirname/$publicId";
+        if (! $this->dynamicFolders && $dirname !== '.') {
+            $publicId = "{$dirname}/{$publicId}";
         }
 
         return $publicId;
@@ -536,6 +537,6 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
     {
         $dirname = pathinfo($path, PATHINFO_DIRNAME);
 
-        return $dirname === '.' ? "" : $dirname;
+        return $dirname === '.' ? '' : $dirname;
     }
 }
