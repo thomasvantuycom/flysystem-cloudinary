@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 2.0.0 - 2024-12-18
+
+### Added
+
+- Implement `PublicUrlGenerator`.
+
+### Fixed
+
+- Throw correct error in copy method.
+- Handle issues with eventual consistency in the Search API.
+
+### Removed
+
+- **Breaking:** Remove manual path prefixing.
+
+### Changed
+
+- **Breaking:** Default to dynamic folder mode.
+- Improve code.
+- Fix code style.
+- Update README.
+
 ## 1.0.4 - 2024-06-01
 
 ### Fixed
