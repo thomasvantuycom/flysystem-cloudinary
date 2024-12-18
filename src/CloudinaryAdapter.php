@@ -37,7 +37,7 @@ class CloudinaryAdapter implements FilesystemAdapter
     public function __construct(
         Cloudinary $client,
         MimeTypeDetector $mimeTypeDetector = null,
-        bool $dynamicFolders = false
+        bool $dynamicFolders = true
     ) {
         $this->client = $client;
         $this->mimeTypeDetector = $mimeTypeDetector ?? new FinfoMimeTypeDetector();

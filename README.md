@@ -52,9 +52,9 @@ By default, the adapter employs `League\MimeTypeDetection\FinfoMimeTypeDetector`
 $adapter = new CloudinaryAdapter($client, $mimeTypeDetector);
 ```
 
-### Enabling dynamic folders mode.
+### Enabling fixed folder mode.
 
-By default, the adapter operates under the assumption that your Cloudinary cloud uses fixed folder mode. If you wish to support [dynamic folders](https://cloudinary.com/documentation/dynamic_folders), set the third argument to `true`.
+By default, the adapter operates under the assumption that your Cloudinary cloud uses dynamic folder mode. If you wish to support the legacy fixed folder mode, set the third argument to `false`.
 
 ```php
 $adapter = new CloudinaryAdapter($client, null, true);
