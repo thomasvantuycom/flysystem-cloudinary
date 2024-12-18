@@ -14,12 +14,14 @@ use League\Flysystem\UnableToCheckFileExistence;
 use League\Flysystem\UnableToCreateDirectory;
 use League\Flysystem\UnableToDeleteDirectory;
 use League\Flysystem\UnableToDeleteFile;
+use League\Flysystem\UnableToGeneratePublicUrl;
 use League\Flysystem\UnableToListContents;
 use League\Flysystem\UnableToMoveFile;
 use League\Flysystem\UnableToReadFile;
 use League\Flysystem\UnableToRetrieveMetadata;
 use League\Flysystem\UnableToWriteFile;
 use League\Flysystem\UnableToSetVisibility;
+use League\Flysystem\UrlGeneration\PublicUrlGenerator;
 use League\Flysystem\Visibility;
 use League\MimeTypeDetection\FinfoMimeTypeDetector;
 use GuzzleHttp\Psr7\Utils;
@@ -28,7 +30,7 @@ use League\MimeTypeDetection\MimeTypeDetector;
 use Throwable;
 use Generator;
 
-class CloudinaryAdapter implements FilesystemAdapter
+class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
 {
     private Cloudinary $client;
     private MimeTypeDetector $mimeTypeDetector;
@@ -431,6 +433,21 @@ class CloudinaryAdapter implements FilesystemAdapter
             $this->client->uploadApi()->upload($url, $options);
         } catch (Throwable $e) {
             throw UnableToCopyFile::fromLocationTo($source, $destination, $e);
+        }
+    }
+
+    public function publicUrl(string $path, Config $config): string
+    {
+        try {
+            $resourceType = $this->pathToResourceType($path);
+            $publicId = $this->pathToPublicId($path, $resourceType);
+            $resource = $this->client->adminApi()->asset($publicId, [
+                "resource_type" => $resourceType,
+            ]);
+
+            return $resource['secure_url'];
+        } catch (Throwable $e) {
+            throw UnableToGeneratePublicUrl::dueToError($path, $e);
         }
     }
 
