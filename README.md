@@ -23,14 +23,11 @@ $client = new Cloudinary([
         'api_key' => 'API_KEY',
         'api_secret' => 'API_SECRET',
     ],
-    'url' => [
-        'forceVersion' => false,
-    ],
 ]);
 
 $adapter = new CloudinaryAdapter($client);
 
-$filesystem = new Filesystem($adapater);
+$filesystem = new Filesystem($adapter);
 ```
 
 ### Storing assets in a subfolder
@@ -70,8 +67,6 @@ $adapter = new CloudinaryAdapter($client, null, true);
 ```bash
 composer test
 ```
-
-The tests exhibit some flakiness due to delays in Cloudinary's upload and delete responses.
 
 ## License
 
