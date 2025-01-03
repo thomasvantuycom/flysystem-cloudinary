@@ -161,6 +161,8 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
             }
 
             $this->client->adminApi()->deleteFolder($path);
+        } catch (NotFound $e) {
+            // Silently fail when the remote folder did not exist?
         } catch (Throwable $e) {
             throw UnableToDeleteDirectory::atLocation($path, $e->getMessage(), $e);
         }
