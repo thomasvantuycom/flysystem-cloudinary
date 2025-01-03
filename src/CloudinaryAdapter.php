@@ -420,7 +420,11 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
             $fileSize,
             $visibility,
             $lastModified,
-            $mimeType
+            $mimeType,
+            extraMetadata: [
+                'public_id' => $resource["public_id"],
+                'asset_folder' => $resource["asset_folder"],
+            ],
         );
     }
 
