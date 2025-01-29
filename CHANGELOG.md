@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 2.0.1 - 2025-01-29
+
+### Fixed
+
+- Allow moving asset to root folder in dynamic folder mode.
+
+### Changed
+
+- Bump cloudinary_php version to 3.1.0
+
 ## 2.0.0 - 2024-12-18
 
 ### Added
