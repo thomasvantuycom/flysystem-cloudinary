@@ -34,8 +34,8 @@
     ],
     "require": {
         "php": "^8.0.2",
-        "league/flysystem": "^3.23",
-        "cloudinary/cloudinary_php": "^2.12"
+        "cloudinary/cloudinary_php": "^3.1.0",
+        "league/flysystem": "^3.23"
     },
     "require-dev": {
         "league/flysystem-adapter-test-utilities": "^3.21",
