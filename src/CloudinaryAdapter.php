@@ -277,8 +277,8 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
                 'invalidate' => true,
             ];
 
-            if ($this->dynamicFolders && ($folder = $this->folder($destination)) !== '') {
-                $options['asset_folder'] = $folder;
+            if ($this->dynamicFolders) {
+                $options['asset_folder'] = $this->folder($destination);
             }
 
             if ($destinationPublicId === $sourcePublicId) {
