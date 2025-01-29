@@ -161,6 +161,8 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
             }
 
             $this->client->adminApi()->deleteFolder($path);
+        } catch (UnableToListContents $e) {
+            // Silently fail when the remote folder did not exist?
         } catch (Throwable $e) {
             throw UnableToDeleteDirectory::atLocation($path, $e->getMessage(), $e);
         }
@@ -418,7 +420,11 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
             $fileSize,
             $visibility,
             $lastModified,
-            $mimeType
+            $mimeType,
+            extraMetadata: [
+                'public_id' => $resource["public_id"],
+                'asset_folder' => $resource["asset_folder"],
+            ],
         );
     }
 
