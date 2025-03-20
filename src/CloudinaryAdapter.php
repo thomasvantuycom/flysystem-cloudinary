@@ -161,6 +161,7 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
             }
 
             $this->client->adminApi()->deleteFolder($path);
+        } catch (UnableToListContents $e) {
         } catch (Throwable $e) {
             throw UnableToDeleteDirectory::atLocation($path, $e->getMessage(), $e);
         }
