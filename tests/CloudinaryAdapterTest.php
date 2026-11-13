@@ -18,6 +18,20 @@ class CloudinaryAdapterTest extends FilesystemAdapterTestCase
         $this->markTestSkipped("Cloudinary doesn't support empty files.");
     }
 
+    /**
+     * @test
+     */
+    public function listing_a_directory_named_0(): void
+    {
+        $this->givenWeHaveAnExistingFile('0/path.txt');
+
+        $this->runScenario(function () {
+            $listing = iterator_to_array($this->adapter()->listContents('0', false));
+
+            $this->assertCount(1, $listing);
+        });
+    }
+
     public function overwriting_a_file(): void
     {
         $this->runScenario(function () {
