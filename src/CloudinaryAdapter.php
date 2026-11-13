@@ -40,7 +40,7 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
 
     public function __construct(
         Cloudinary $client,
-        MimeTypeDetector $mimeTypeDetector = null,
+        ?MimeTypeDetector $mimeTypeDetector = null,
         bool $dynamicFolders = true
     ) {
         $this->client = $client;
