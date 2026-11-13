@@ -13,6 +13,9 @@ use ThomasVantuycom\FlysystemCloudinary\CloudinaryAdapter;
 
 class CloudinaryAdapterTest extends FilesystemAdapterTestCase
 {
+    /**
+     * @test
+     */
     public function writing_a_file_with_an_empty_stream(): void
     {
         $this->markTestSkipped("Cloudinary doesn't support empty files.");
@@ -32,6 +35,9 @@ class CloudinaryAdapterTest extends FilesystemAdapterTestCase
         });
     }
 
+    /**
+     * @test
+     */
     public function overwriting_a_file(): void
     {
         $this->runScenario(function () {
@@ -45,11 +51,17 @@ class CloudinaryAdapterTest extends FilesystemAdapterTestCase
         });
     }
 
+    /**
+     * @test
+     */
     public function setting_visibility(): void
     {
         $this->markTestSkipped("Cloudinary doesn't support setting visibility.");
     }
 
+    /**
+     * @test
+     */
     public function setting_visibility_on_a_file_that_does_not_exist(): void
     {
         $this->markTestSkipped("Cloudinary doesn't support setting visibility.");
