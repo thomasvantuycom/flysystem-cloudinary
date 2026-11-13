@@ -519,11 +519,11 @@ class CloudinaryAdapter implements FilesystemAdapter, PublicUrlGenerator
         $pathInfo = pathinfo($path);
         $dirname = $pathInfo['dirname'];
         $filename = $pathInfo['filename'];
-        $extension = $pathInfo['extension'];
+        $extension = $pathInfo['extension'] ?? null;
 
         $publicId = $filename;
 
-        if ($resourceType === AssetType::RAW) {
+        if ($resourceType === AssetType::RAW && $extension !== null) {
             $publicId .= ".{$extension}";
         }
 
